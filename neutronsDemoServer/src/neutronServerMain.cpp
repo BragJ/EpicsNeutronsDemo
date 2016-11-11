@@ -28,11 +28,14 @@
 
 
 using namespace std;
+// 
 using std::tr1::shared_ptr;
+
 using namespace epics::pvData;
 using namespace epics::pvAccess;
 using namespace epics::pvDatabase;
 using namespace epics::neutronServer;
+
 
 static void help(const char *name)
 {
@@ -45,21 +48,29 @@ static void help(const char *name)
 }
 
 int main(int argc,char *argv[])
-{
+{   
+
     double delay = 0.01;
-    size_t event_count = 10;
+    size_t event_count;
     bool random_count = false;
     bool realistic = false;
 
     int opt;
+    // 如果参数不包含在参数optstring 的选项字母则返回“?”字符，分析结束则返回-1。
     while ((opt = getopt(argc, argv, "d:e:h:mr")) != -1)
     {
         switch (opt)
         {
         case 'd':
+        // atof() 用于将字符串转换为双精度浮点数(double)
+        // double atof (const char* str);
+        // 它会扫描参数str字符串，跳过前面的空白字符（例如空格，tab缩进等，可以通过 isspace() 函数来检测），直到遇上数字或正负符号才开始做转换，而再遇到非数字或字符串结束时('\0')才结束转换，并将结果返回。
+        // 用于读数字型的字符串
+        // optarg is 符合的参数
+
             delay = atof(optarg);
             break;
-        case 'e':
+        case 'e':        
             event_count = (size_t)atol(optarg);
             break;
         case 'h':
@@ -81,11 +92,14 @@ int main(int argc,char *argv[])
     cout << "Events: " << event_count << endl;
     cout << "Realistic: " << realistic << endl;
 
+    //
     PVDatabasePtr master = PVDatabase::getMaster();
+
     ChannelProviderLocalPtr channelProvider = getChannelProviderLocal();
 
 
     NeutronPVRecord::shared_pointer neutrons = NeutronPVRecord::create("neutrons");
+    
     if (! master->addRecord(neutrons))
         throw std::runtime_error("Cannot add record " + neutrons->getRecordName());
 
@@ -111,7 +125,7 @@ int main(int argc,char *argv[])
     }
     runnable->shutdown();
     pvaServer->shutdown();
-    epicsThreadSleep(1.0);
+    epicsThreadSleep(0.1);
     pvaServer->destroy();
     channelProvider->destroy();
 

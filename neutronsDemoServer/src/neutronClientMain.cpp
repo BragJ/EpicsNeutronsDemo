@@ -422,7 +422,7 @@ int main(int argc,char *argv[])
 {
     string channel = "neutrons";
     string request = "record[queueSize=100]field()";
-    double timeout = 2.0;
+    double timeout = 200.0;
     bool monitor = false;
     bool quiet = false;
     short priority = ChannelProvider::PRIORITY_DEFAULT;
@@ -471,8 +471,9 @@ int main(int argc,char *argv[])
     try
     {
         ClientFactory::start();
-        if (monitor)
-            doMonitor(channel, request, timeout, priority, limit, quiet);
+        if (monitor){
+        	cout<< "the running ~~" <<endl;
+            doMonitor(channel, request, timeout, priority, limit, quiet);}
         else
             getValue(channel, request, timeout);
         ClientFactory::stop();

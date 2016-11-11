@@ -28,19 +28,20 @@ NeutronPVRecord::shared_pointer NeutronPVRecord::create(string const & recordNam
     PVDataCreatePtr pvDataCreate = getPVDataCreate();
 
     // Create the data structure that the PVRecord should use
-    // 
     PVStructurePtr pvStructure = pvDataCreate->createPVStructure(
         fieldCreate->createFieldBuilder()
         ->add("timeStamp", standardField->timeStamp())
         // Demo for manual setup of structure, could use
         // add("proton_charge", standardField->scalar(pvDouble, ""))
-        
-        ->add("T0", standardField->scalar(pvUInt, ""))
+        ->addNestedStructure("proton_charge")
+            ->setId("epics:nt/NTScalar:1.0")
+            ->add("value", pvDouble)
+        ->endNested()
         ->add("time_of_flight", standardField->scalarArray(pvUInt, ""))
         ->add("pixel", standardField->scalarArray(pvUInt, ""))
         ->createStructure()
         );
-   
+
     NeutronPVRecord::shared_pointer pvRecord(new NeutronPVRecord(recordName, pvStructure));
     if (!pvRecord->init())
         pvRecord.reset();
@@ -60,9 +61,8 @@ bool NeutronPVRecord::init()
     if (!pvTimeStamp.attach(getPVStructure()->getSubField("timeStamp")))
         return false;
 
-    pvT0 = 
-    getPVStructure()->getSubField<PVUInt>("T0.value");
-    if (pvT0.get() == NULL)
+    pvProtonCharge = getPVStructure()->getSubField<PVDouble>("proton_charge.value");
+    if (pvProtonCharge.get() == NULL)
         return false;
 
     pvTimeOfFlight = getPVStructure()->getSubField<PVUIntArray>("time_of_flight.value");
@@ -78,23 +78,14 @@ bool NeutronPVRecord::init()
 
 void NeutronPVRecord::process()
 {
-    // Update timestamp 
+    // Update timestamp
     timeStamp.getCurrent();
-    // void TimeStamp::getCurrent()
-    // {
-    //     epicsTimeStamp epicsTime;
-    //     epicsTimeGetCurrent(&epicsTime);
-    //     secondsPastEpoch = epicsTime.secPastEpoch;
-    //     secondsPastEpoch += posixEpochAtEpicsEpoch;
-    //     nanoseconds = epicsTime.nsec;
-    // }
-
     // pulse_id is unsigned, put into userTag as signed?
     timeStamp.setUserTag(static_cast<int>(pulse_id));
     pvTimeStamp.set(timeStamp);
 }
 
-void NeutronPVRecord::update(uint64 id, uint64 t0,
+void NeutronPVRecord::update(uint64 id, double charge,
                              shared_vector<const uint32> tof,
                              shared_vector<const uint32> pixel)
 {
@@ -103,7 +94,7 @@ void NeutronPVRecord::update(uint64 id, uint64 t0,
     {
         beginGroupPut();
         pulse_id = id;
-        pvT0->put(t0);
+        pvProtonCharge->put(charge);
         pvTimeOfFlight->replace(tof);
         pvPixel->replace(pixel);
 
@@ -137,10 +128,6 @@ void NeutronPVRecord::update(uint64 id, uint64 t0,
  *  When creating a large demo data arrays,
  *  the two arrays can be filled in separate threads / CPU cores
  */
-//#############
-// two threads, one each for the tof_runnable and pixel_runnable,
- // the two arrays can be filled in separate threads / CPU cores
-//  #######
 class ArrayRunnable : public WorkerRunnable
 {
 public:
@@ -185,27 +172,19 @@ protected:
 
 void TimeOfFlightRunnable::doWork()
 {
-    //shared_vector 就是一个容器.
     shared_vector<uint32> tof(count);
-    if (this->realistic == true)
-         {
-        //此时tof 和 pixel 数据 就是 id 号
-          fill(tof.begin(), tof.end(), id+4000); 
-        }
+    if (this->realistic == false)
+        fill(tof.begin(), tof.end(), id);
     else
     {
         uint32 *p = tof.dataPtr().get();
         for (uint32 i = 0; i != tof.size(); ++i)
         {
-            
             uint32 normal_tof = 0;
-            //#define NS_TOF_MAX 160000 /** Maximum TOF value for the -r option (realistic data)*/
-            //#define NS_TOF_NORM 10  /** Number of random samples for each TOF to generate a normal distribution*/
-
             for (uint j = 0; j < NS_TOF_NORM; ++j)
-
                 normal_tof += rand() % (NS_TOF_MAX);
-            *(p++) = int(normal_tof/NS_TOF_NORM/4);
+		//cout<<"the tof is  ======================" << normal_tof << endl;
+            *(p++) = int(normal_tof/NS_TOF_NORM);
         }
     }
     data = freeze(tof);
@@ -224,12 +203,12 @@ void PixelRunnable::doWork()
 	// In reality, each event would have a different value,
     // which is simulated a little bit by actually looping over
     // each element.
-    uint32 value = id%1024;
+    uint32 value = id;
 
     // Pixels created in this thread
     shared_vector<uint32> pixel(count);
 
-    if (this->realistic == true)
+    if (this->realistic == false)
     {
         // Set elements via [] operator of shared_vector
         // This takes about 1.5 ms for 200000 elements
@@ -252,10 +231,7 @@ void PixelRunnable::doWork()
         timer.start();
         uint32 *p = pixel.dataPtr().get();
         for (size_t i=0; i<count; ++i)
-           {
             *(p++) = value;
-           
-           } 
         timer.stop();
     
     }
@@ -266,12 +242,7 @@ void PixelRunnable::doWork()
         timer.start();
         uint32 *p = pixel.dataPtr().get();
         for (uint32 i = 0; i != pixel.size(); ++i)
-        {   
-            // #define NS_ID_MIN1 0    /** Min pixel ID for detector 1 */
-            // #define NS_ID_MAX1 1023 /** Max pixel ID for detector 1 */
-            // #define NS_ID_MIN2 2048 /** Min pixel ID for detector 2 */
-            // #define NS_ID_MAX2 3072 /** Max pixel ID for detector 2 */
-
+        {
             if (i%2 == 0)
                 *(p++) = (rand() % (NS_ID_MAX1-NS_ID_MIN1)) + NS_ID_MIN1;
             else
@@ -291,7 +262,6 @@ FakeNeutronEventRunnable::FakeNeutronEventRunnable(NeutronPVRecord::shared_point
 
 void FakeNeutronEventRunnable::run()
 {
-
     shared_ptr<ArrayRunnable> tof_runnable(new TimeOfFlightRunnable());
     shared_ptr<epicsThread> tof_thread(new epicsThread(*tof_runnable, "tof_processor", epicsThreadGetStackSize(epicsThreadStackMedium)));
     tof_thread->start();
@@ -314,20 +284,16 @@ void FakeNeutronEventRunnable::run()
 
         // Wait until then
         double sleep = next_run - epicsTime::getCurrent();
-        
         if (sleep >= 0)
             epicsThreadSleep(sleep);
-        else{ 
-            //设置延迟的次数
-             ++slow;
-            }
+        else
+            ++slow;
+
         // Increment the 'ID' of the pulse
         ++id;
-        //id += 5; 
 
         // Create fake { time-of-flight, pixel } events,
         // using the ID to get changing values, in parallel threads
-        //mine> 这里设置是否tof  array定长  
     	size_t count = random_count ? (rand() % event_count) : event_count;
         tof_runnable->createEvents(count, id, realistic);
         pixel_runnable->createEvents(count, id, realistic);
@@ -336,7 +302,6 @@ void FakeNeutronEventRunnable::run()
         // Mark this run
         last_run = epicsTime::getCurrent();
         ++packets;
-        //packets += 5;
 
         // Every 10 second, show how many updates we generated so far
         if (last_run > next_log)
@@ -348,12 +313,11 @@ void FakeNeutronEventRunnable::run()
             slow = 0;
         }
 
-
         // Vary a fake 'charge' based on the ID
-        uint64 mt0 = 9999999;
+        double charge = (1 + id % 10)*1e8;
 
         // <<<< Wait for array threads, fetch their data <<<<
-        record->update(id, mt0, tof_runnable->getEvents(), pixel_runnable->getEvents());
+        record->update(id, charge, tof_runnable->getEvents(), pixel_runnable->getEvents());
 
         // TODO Overflow the server queue by posting several updates.
         // For client request "record[queueSize=2]field()", this causes overrun.

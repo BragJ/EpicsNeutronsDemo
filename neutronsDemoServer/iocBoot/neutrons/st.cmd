@@ -22,7 +22,8 @@ epicsThreadSleep(1.0)
 # this call can be used as an alternative.
 # The events created that way can not be configured at runtime
 # via V3 records!
-# neutronServerCreateRecord("neutrons", 0.01, 200000)
+#neutronServerCreateRecord("neutrons", 0.1, 10)
+#neutronServerCreateRecord("neutrons0", 0.01, 10)	
 
 startPVAServer
 

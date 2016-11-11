@@ -22,7 +22,7 @@
 namespace epics { namespace neutronServer {
 
 #define NS_TOF_MAX 160000 /** Maximum TOF value for the -r option (realistic data)*/
-#define NS_TOF_NORM 10 /** Number of random samples for each TOF to generate a normal distribution*/
+#define NS_TOF_NORM 10/** Number of random samples for each TOF to generate a normal distribution*/
 
 #define NS_ID_MIN1 0    /** Min pixel ID for detector 1 */
 #define NS_ID_MAX1 1023 /** Max pixel ID for detector 1 */
@@ -54,9 +54,7 @@ public:
     virtual void process();
 
     /** Update the values of the record */
-    void update(epics::pvData::uint64 id, double charge,
-                epics::pvData::shared_vector<const epics::pvData::uint32> tof,
-                epics::pvData::shared_vector<const epics::pvData::uint32> pixel);
+    void update(epics::pvData::uint64 id, epics::pvData::uint64 t0, epics::pvData::shared_vector<const epics::pvData::uint32> tof,epics::pvData::shared_vector<const epics::pvData::uint32> pixel);
 
 private:
     NeutronPVRecord(std::string const & recordName,
@@ -68,9 +66,10 @@ private:
 
     // Pointers in to the records' data structure
     epics::pvData::PVTimeStamp    pvTimeStamp;
-    epics::pvData::PVDoublePtr    pvProtonCharge;
+    epics::pvData::PVUIntPtr    pvT0;
     epics::pvData::PVUIntArrayPtr pvTimeOfFlight;
     epics::pvData::PVUIntArrayPtr pvPixel;
+    // get the other type   ::opt/egcs/epics/EPICS4/pvDataCPP/documentation/pvDataCPP_20121026.html:
 };
 
 /** Runnable for demo events */
@@ -97,3 +96,4 @@ private:
 }}
 
 #endif  /* NEUTRONSERVER_H */
+        
